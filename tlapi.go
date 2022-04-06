@@ -11,6 +11,7 @@ import (
 	"time"
 )
 
+// SearchRequest is a search request.
 type SearchRequest struct {
 	Categories []int
 	Facets     map[string]string
@@ -21,12 +22,14 @@ type SearchRequest struct {
 	Page       int
 }
 
+// Search creates a search request.
 func Search(query ...string) *SearchRequest {
 	return &SearchRequest{
 		Query: query,
 	}
 }
 
+// Do executes the request against the client.
 func (req *SearchRequest) Do(ctx context.Context, cl *Client) (*SearchResponse, error) {
 	var q string
 	if len(req.Categories) != 0 {
@@ -72,11 +75,13 @@ func (req *SearchRequest) Do(ctx context.Context, cl *Client) (*SearchResponse, 
 	return res, nil
 }
 
+// WithCategories adds search category filters.
 func (req SearchRequest) WithCategories(categories ...int) *SearchRequest {
 	req.Categories = categories
 	return &req
 }
 
+// WithFacets adds search facet filters as string pairs (name, value...).
 func (req SearchRequest) WithFacets(facets ...string) *SearchRequest {
 	if len(facets)%2 != 0 {
 		panic("facets must be a multiple of 2")
@@ -90,26 +95,40 @@ func (req SearchRequest) WithFacets(facets ...string) *SearchRequest {
 	return &req
 }
 
+// WithFacet adds a single search facet name filter, joining values with a ','.
+func (req SearchRequest) WithFacet(name string, values ...string) *SearchRequest {
+	if req.Facets == nil {
+		req.Facets = make(map[string]string)
+	}
+	req.Facets[name] = strings.Join(values, ",")
+	return &req
+}
+
+// WithPage sets the search page filter.
 func (req SearchRequest) WithPage(page int) *SearchRequest {
 	req.Page = page
 	return &req
 }
 
+// WithAdded sets the search added filter.
 func (req SearchRequest) WithAdded(added string) *SearchRequest {
 	req.Added = added
 	return &req
 }
 
+// WithOrderBy sets the search orderBy parameter (see OrderBy constants).
 func (req SearchRequest) WithOrderBy(orderBy string) *SearchRequest {
 	req.OrderBy = orderBy
 	return &req
 }
 
+// WithOrder sets the search order parameter (see Order constants).
 func (req SearchRequest) WithOrder(order string) *SearchRequest {
 	req.Order = order
 	return &req
 }
 
+// SearchResponse is a search response.
 type SearchResponse struct {
 	Facets struct {
 		Added   Facet `json:"added,omitempty"`
@@ -129,6 +148,7 @@ type SearchResponse struct {
 	UserTimeZone   string          `json:"userTimeZone,omitempty"`
 }
 
+// Facet is a facet.
 type Facet struct {
 	Items map[string]Item `json:"items,omitempty"`
 	Name  string          `json:"name,omitempty"`
@@ -136,11 +156,13 @@ type Facet struct {
 	Type  string          `json:"type,omitempty"`
 }
 
+// Item is search facet item.
 type Item struct {
 	Label string `json:"label,omitempty"`
 	Count int    `json:"count,omitempty"`
 }
 
+// Tags are tags.
 type Tags struct {
 	Items map[string]int `json:"items,omitempty"`
 	Name  string         `json:"name,omitempty"`
@@ -148,6 +170,7 @@ type Tags struct {
 	Type  string         `json:"type,omitempty"`
 }
 
+// Torrent is a torrent.
 type Torrent struct {
 	AddedTimestamp     time.Time
 	CategoryID         int
@@ -170,6 +193,7 @@ type Torrent struct {
 	Uploader           string
 }
 
+// UnmarshalJSON satisfies the json.Unmarshaler interface.
 func (t *Torrent) UnmarshalJSON(buf []byte) error {
 	var m map[string]interface{}
 	if err := json.Unmarshal(buf, &m); err != nil {
@@ -310,12 +334,15 @@ func (t *Torrent) UnmarshalJSON(buf []byte) error {
 	return nil
 }
 
+// Time is a time value.
 type Time time.Time
 
+// String satisfies the fmt.Stringer interface.
 func (t Time) String() string {
 	return time.Time(t).Format(timefmt)
 }
 
+// UnmarshalJSON satisfies the json.Unmarshaler interface.
 func (t *Time) UnmarshalJSON(buf []byte) error {
 	if string(buf) == `""` {
 		return nil
@@ -328,7 +355,14 @@ func (t *Time) UnmarshalJSON(buf []byte) error {
 	return nil
 }
 
-const timefmt = "2006-01-02 15:04:05"
+// Facet filter names.
+const (
+	FacetAdded   = "added"
+	FacetName    = "name"
+	FacetSeeders = "seeders"
+	FacetSize    = "size"
+	FacetTags    = "tags"
+)
 
 // Order values.
 const (
@@ -347,7 +381,7 @@ const (
 	OrderByLeechers    = "leechers"
 )
 
-// Facet values.
+// Facet filter values.
 const (
 	RangeLast2Weeks  = "[NOW/HOUR-14DAYS TO NOW/HOUR+1HOUR]"
 	RangeLastMonth   = "[NOW/HOUR-1MONTH TO NOW/HOUR+1HOUR]"
@@ -417,8 +451,12 @@ const (
 	CategoryForeignTVSeries = 44
 )
 
+// escaper escapes special characters in facet filters.
 var escaper = strings.NewReplacer(
 	"[", "%255B",
 	" ", "%2520",
 	"]", "%255D",
 )
+
+// timefmt is the time format used for parsing and displaying time values.
+const timefmt = "2006-01-02 15:04:05"

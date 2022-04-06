@@ -10,7 +10,7 @@ func TestSearch(t *testing.T) {
 	cl := buildClient(t)
 	req := Search().
 		WithCategories(CategoryForeignMovies).
-		WithFacets("size", Size15GBPlus).
+		WithFacets(FacetSize, Size15GBPlus).
 		WithOrder(OrderDesc).
 		WithOrderBy(OrderBySize).
 		WithPage(2)

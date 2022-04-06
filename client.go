@@ -9,12 +9,14 @@ import (
 	"net/http"
 )
 
+// Client is a TL client.
 type Client struct {
 	cl        *http.Client
 	Jar       http.CookieJar
 	Transport http.RoundTripper
 }
 
+// New creates a TL client.
 func New(opts ...Option) *Client {
 	cl := &Client{}
 	for _, o := range opts {
@@ -29,6 +31,7 @@ func New(opts ...Option) *Client {
 	return cl
 }
 
+// Do executes a request.
 func (cl *Client) Do(ctx context.Context, req *http.Request, result interface{}) error {
 	if cl.Jar == nil {
 		return errors.New("must supply cookie jar")
@@ -72,14 +75,18 @@ func (cl *Client) Torrent(ctx context.Context, id int) ([]byte, error) {
 	return ioutil.ReadAll(res.Body)
 }
 
+// Option is a TL client option.
 type Option func(cl *Client)
 
+// WithJar is an option to set the cookie jar used by the TL client.
 func WithJar(jar http.CookieJar) Option {
 	return func(cl *Client) {
 		cl.Jar = jar
 	}
 }
 
+// WithTransport is a TL client option to set the http transport used by the TL
+// client.
 func WithTransport(transport http.RoundTripper) Option {
 	return func(cl *Client) {
 		cl.Transport = transport
