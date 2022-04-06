@@ -290,7 +290,10 @@ func (t Time) String() string {
 }
 
 func (t *Time) UnmarshalJSON(buf []byte) error {
-	i, err := strconv.ParseInt(string(buf), 10, 64)
+	if string(buf) == `""` {
+		return nil
+	}
+	i, err := strconv.ParseInt(string(buf[1:len(buf)-1]), 10, 64)
 	if err != nil {
 		return err
 	}
