@@ -3,7 +3,7 @@ package tlapi
 import (
 	"context"
 	"encoding/json"
-	"errors"
+	"fmt"
 	"net/http"
 	"net/url"
 	"strconv"
@@ -122,31 +122,171 @@ type Tags struct {
 }
 
 type Torrent struct {
-	AddedTimestamp     Timestamp `json:"addedTimestamp,omitempty"`
-	CategoryID         int       `json:"categoryID,omitempty"`
-	Completed          int       `json:"completed,omitempty"`
-	DownloadMultiplier int       `json:"download_multiplier,omitempty"`
-	FID                string    `json:"fid,omitempty"`
-	Filename           string    `json:"filename,omitempty"`
-	Genres             Genres    `json:"genres,omitempty"`
-	IgdbID             IgdbID    `json:"igdbID,omitempty"`
-	ImdbID             string    `json:"imdbID,omitempty"`
-	Leechers           int       `json:"leechers,omitempty"`
-	Name               string    `json:"name,omitempty"`
-	New                bool      `json:"new,omitempty"`
-	NumComments        int       `json:"numComments,omitempty"`
-	Rating             float64   `json:"rating,omitempty"`
-	Seeders            int       `json:"seeders,omitempty"`
-	Size               int64     `json:"size,omitempty"`
-	Tags               TagList   `json:"tags,omitempty"`
-	TvmazeID           string    `json:"tvmazeID,omitempty"`
-	Uploader           string    `json:"uploader,omitempty"`
+	AddedTimestamp     time.Time
+	CategoryID         int
+	Completed          int
+	DownloadMultiplier int
+	ID                 int
+	Filename           string
+	Genres             []string
+	IgdbID             string
+	ImdbID             string
+	Leechers           int
+	Name               string
+	New                bool
+	NumComments        int
+	Rating             float64
+	Seeders            int
+	Size               int64
+	Tags               []string
+	TvmazeID           string
+	Uploader           string
+}
+
+func (t *Torrent) UnmarshalJSON(buf []byte) error {
+	var m map[string]interface{}
+	if err := json.Unmarshal(buf, &m); err != nil {
+		return err
+	}
+	torrent := Torrent{}
+	for k, v := range m {
+		switch k {
+		case "addedTimestamp":
+			s, ok := v.(string)
+			if !ok {
+				return fmt.Errorf("invalid addedTimestamp type %T", v)
+			}
+			var err error
+			if torrent.AddedTimestamp, err = time.Parse(timefmt, s); err != nil {
+				return fmt.Errorf("invalid addedTimestamp value %q: %w", s, err)
+			}
+		case "categoryID":
+			f, ok := v.(float64)
+			if !ok {
+				return fmt.Errorf("invalid categoryID type %T", v)
+			}
+			torrent.CategoryID = int(f)
+		case "completed":
+			f, ok := v.(float64)
+			if !ok {
+				return fmt.Errorf("invalid completed type %T", v)
+			}
+			torrent.Completed = int(f)
+		case "download_multiplier":
+			f, ok := v.(float64)
+			if !ok {
+				return fmt.Errorf("invalid download_multiplier type %T", v)
+			}
+			torrent.DownloadMultiplier = int(f)
+		case "fid":
+			s, ok := v.(string)
+			if !ok {
+				return fmt.Errorf("invalid fid type %T", v)
+			}
+			var err error
+			if torrent.ID, err = strconv.Atoi(s); err != nil {
+				return fmt.Errorf("invalid fid value %q: %w", s, err)
+			}
+		case "filename":
+			var ok bool
+			if torrent.Filename, ok = v.(string); !ok {
+				return fmt.Errorf("invalid filename type %T", v)
+			}
+		case "genres":
+			s, ok := v.(string)
+			if !ok {
+				return fmt.Errorf("invalid genres type %T", v)
+			}
+			torrent.Genres = strings.Split(s, ", ")
+		case "igdbID":
+			switch x := v.(type) {
+			case string:
+				torrent.IgdbID = x
+			case float64:
+				torrent.IgdbID = strconv.Itoa(int(x))
+			default:
+				return fmt.Errorf("invalid igdbID type %T", v)
+			}
+		case "imdbID":
+			var ok bool
+			if torrent.ImdbID, ok = v.(string); !ok {
+				return fmt.Errorf("invalid imdbID type %T", v)
+			}
+		case "leechers":
+			f, ok := v.(float64)
+			if !ok {
+				return fmt.Errorf("invalid leechers type %T", v)
+			}
+			torrent.Leechers = int(f)
+		case "name":
+			var ok bool
+			if torrent.Name, ok = v.(string); !ok {
+				return fmt.Errorf("invalid name type %T", v)
+			}
+		case "new":
+			var ok bool
+			if torrent.New, ok = v.(bool); !ok {
+				return fmt.Errorf("invalid new type %T", v)
+			}
+		case "numComments":
+			f, ok := v.(float64)
+			if !ok {
+				return fmt.Errorf("invalid numComments type %T", v)
+			}
+			torrent.NumComments = int(f)
+		case "rating":
+			var ok bool
+			if torrent.Rating, ok = v.(float64); !ok {
+				return fmt.Errorf("invalid rating type %T", v)
+			}
+		case "seeders":
+			f, ok := v.(float64)
+			if !ok {
+				return fmt.Errorf("invalid seeders type %T", v)
+			}
+			torrent.Seeders = int(f)
+		case "size":
+			f, ok := v.(float64)
+			if !ok {
+				return fmt.Errorf("invalid size type %T", v)
+			}
+			torrent.Size = int64(f)
+		case "tags":
+			switch x := v.(type) {
+			case string:
+			case []interface{}:
+				for i, z := range x {
+					s, ok := z.(string)
+					if !ok {
+						return fmt.Errorf("invalid tags value type %T (pos %d)", z, i)
+					}
+					torrent.Tags = append(torrent.Tags, s)
+				}
+			default:
+				return fmt.Errorf("invalid tags type %T", v)
+			}
+		case "tvmazeID":
+			var ok bool
+			if torrent.TvmazeID, ok = v.(string); !ok {
+				return fmt.Errorf("invalid tvmazeID type %T", v)
+			}
+		case "uploader":
+			var ok bool
+			if torrent.Uploader, ok = v.(string); !ok {
+				return fmt.Errorf("invalid uploader type %T", v)
+			}
+		default:
+			return fmt.Errorf("unknown field %q", k)
+		}
+	}
+	*t = torrent
+	return nil
 }
 
 type Time time.Time
 
 func (t Time) String() string {
-	return time.Time(t).Format(timestampfmt)
+	return time.Time(t).Format(timefmt)
 }
 
 func (t *Time) UnmarshalJSON(buf []byte) error {
@@ -158,64 +298,9 @@ func (t *Time) UnmarshalJSON(buf []byte) error {
 	return nil
 }
 
-type Genres []string
+const timefmt = "2006-01-02 15:04:05"
 
-func (g *Genres) UnmarshalJSON(buf []byte) error {
-	if len(buf) < 2 {
-		return errors.New("invalid genres value")
-	}
-	*g = strings.Split(string(buf[1:len(buf)-1]), ", ")
-	return nil
-}
-
-type TagList []string
-
-func (l *TagList) UnmarshalJSON(buf []byte) error {
-	if string(buf) == `""` {
-		return nil
-	}
-	var v []string
-	if err := json.Unmarshal(buf, &v); err != nil {
-		return err
-	}
-	*l = TagList(v)
-	return nil
-}
-
-type IgdbID string
-
-func (i *IgdbID) UnmarshalJSON(buf []byte) error {
-	if string(buf) == `""` {
-		return nil
-	}
-	*i = IgdbID(string(buf))
-	return nil
-}
-
-type Timestamp time.Time
-
-func (t Timestamp) String() string {
-	return time.Time(t).Format(timestampfmt)
-}
-
-func (t Timestamp) MarshalJSON() ([]byte, error) {
-	return []byte("\"" + t.String() + "\""), nil
-}
-
-func (t *Timestamp) UnmarshalJSON(buf []byte) error {
-	if len(buf) < 2 {
-		return errors.New("invalid timestamp value")
-	}
-	v, err := time.Parse(timestampfmt, string(buf[1:len(buf)-1]))
-	if err != nil {
-		return err
-	}
-	*t = Timestamp(v)
-	return nil
-}
-
-const timestampfmt = "2006-01-02 15:04:05"
-
+// Facet values.
 const (
 	RangeLast2Weeks  = "[NOW/HOUR-14DAYS TO NOW/HOUR+1HOUR]"
 	RangeLastMonth   = "[NOW/HOUR-1MONTH TO NOW/HOUR+1HOUR]"
@@ -233,12 +318,7 @@ const (
 	Size750MBto1_5GB = "[786432000 TO 1610612736]"
 )
 
-var escaper = strings.NewReplacer(
-	"[", "%255B",
-	" ", "%2520",
-	"]", "%255D",
-)
-
+// Categories.
 const (
 	CategoryMoviesCam               = 8
 	CategoryMoviesTSTC              = 9
@@ -288,4 +368,10 @@ const (
 
 	CategoryForeignMovies   = 36
 	CategoryForeignTVSeries = 44
+)
+
+var escaper = strings.NewReplacer(
+	"[", "%255B",
+	" ", "%2520",
+	"]", "%255D",
 )

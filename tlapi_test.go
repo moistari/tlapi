@@ -17,7 +17,7 @@ func TestSearch(t *testing.T) {
 		t.Fatalf("expected no error, got: %v", err)
 	}
 	for i, r := range res.TorrentList {
-		t.Logf("%02d: %s %q", i, r.FID, r.Name)
+		t.Logf("%02d: %d %q", i, r.ID, r.Name)
 	}
 }
 
