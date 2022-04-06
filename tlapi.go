@@ -15,30 +15,13 @@ type SearchRequest struct {
 	Categories []int
 	Facets     map[string]string
 	Query      []string
+	Page       int
 }
 
 func Search(query ...string) *SearchRequest {
 	return &SearchRequest{
 		Query: query,
 	}
-}
-
-func (req SearchRequest) WithCategories(categories ...int) *SearchRequest {
-	req.Categories = categories
-	return &req
-}
-
-func (req SearchRequest) WithFacets(facets ...string) *SearchRequest {
-	if len(facets)%2 != 0 {
-		panic("facets must be a multiple of 2")
-	}
-	if req.Facets == nil {
-		req.Facets = make(map[string]string)
-	}
-	for i := 0; i < len(facets); i += 2 {
-		req.Facets[facets[i]] = facets[i+1]
-	}
-	return &req
 }
 
 func (req *SearchRequest) Do(ctx context.Context, cl *Client) (*SearchResponse, error) {
@@ -62,6 +45,9 @@ func (req *SearchRequest) Do(ctx context.Context, cl *Client) (*SearchResponse, 
 	if len(req.Query) != 0 {
 		q += "/query/" + url.PathEscape(strings.Join(req.Query, " "))
 	}
+	if req.Page != 0 {
+		q += "/page/" + strconv.Itoa(req.Page)
+	}
 	urlstr := "https://www.torrentleech.org/torrents/browse/list" + q
 	httpReq, err := http.NewRequest("GET", urlstr, nil)
 	if err != nil {
@@ -72,6 +58,29 @@ func (req *SearchRequest) Do(ctx context.Context, cl *Client) (*SearchResponse, 
 		return nil, err
 	}
 	return res, nil
+}
+
+func (req SearchRequest) WithCategories(categories ...int) *SearchRequest {
+	req.Categories = categories
+	return &req
+}
+
+func (req SearchRequest) WithFacets(facets ...string) *SearchRequest {
+	if len(facets)%2 != 0 {
+		panic("facets must be a multiple of 2")
+	}
+	if req.Facets == nil {
+		req.Facets = make(map[string]string)
+	}
+	for i := 0; i < len(facets); i += 2 {
+		req.Facets[facets[i]] = facets[i+1]
+	}
+	return &req
+}
+
+func (req SearchRequest) WithPage(page int) *SearchRequest {
+	req.Page = page
+	return &req
 }
 
 type SearchResponse struct {

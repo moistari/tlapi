@@ -10,7 +10,8 @@ func TestSearch(t *testing.T) {
 	cl := buildClient(t)
 	req := Search().
 		WithCategories(CategoryForeignMovies).
-		WithFacets("size", Size15GBPlus)
+		WithFacets("size", Size15GBPlus).
+		WithPage(2)
 	res, err := req.Do(context.Background(), cl)
 	if err != nil {
 		t.Fatalf("expected no error, got: %v", err)
