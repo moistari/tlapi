@@ -15,6 +15,9 @@ type SearchRequest struct {
 	Categories []int
 	Facets     map[string]string
 	Query      []string
+	Added      string
+	OrderBy    string
+	Order      string
 	Page       int
 }
 
@@ -44,6 +47,15 @@ func (req *SearchRequest) Do(ctx context.Context, cl *Client) (*SearchResponse, 
 	}
 	if len(req.Query) != 0 {
 		q += "/query/" + url.PathEscape(strings.Join(req.Query, " "))
+	}
+	if req.Added != "" {
+		q += "/added/" + req.Added
+	}
+	if req.OrderBy != "" {
+		q += "/orderby/" + req.OrderBy
+	}
+	if req.Order != "" {
+		q += "/order/" + req.Order
 	}
 	if req.Page != 0 {
 		q += "/page/" + strconv.Itoa(req.Page)
@@ -80,6 +92,21 @@ func (req SearchRequest) WithFacets(facets ...string) *SearchRequest {
 
 func (req SearchRequest) WithPage(page int) *SearchRequest {
 	req.Page = page
+	return &req
+}
+
+func (req SearchRequest) WithAdded(added string) *SearchRequest {
+	req.Added = added
+	return &req
+}
+
+func (req SearchRequest) WithOrderBy(orderBy string) *SearchRequest {
+	req.OrderBy = orderBy
+	return &req
+}
+
+func (req SearchRequest) WithOrder(order string) *SearchRequest {
+	req.Order = order
 	return &req
 }
 
@@ -302,6 +329,23 @@ func (t *Time) UnmarshalJSON(buf []byte) error {
 }
 
 const timefmt = "2006-01-02 15:04:05"
+
+// Order values.
+const (
+	OrderAsc  = "asc"
+	OrderDesc = "desc"
+)
+
+// OrderBy values.
+const (
+	OrderByNameSort    = "nameSort"
+	OrderByAdded       = "added"
+	OrderByNumComments = "numComments"
+	OrderBySize        = "size"
+	OrderByCompleted   = "completed"
+	OrderBySeeders     = "seeders"
+	OrderByLeechers    = "leechers"
+)
 
 // Facet values.
 const (

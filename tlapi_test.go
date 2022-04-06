@@ -11,14 +11,17 @@ func TestSearch(t *testing.T) {
 	req := Search().
 		WithCategories(CategoryForeignMovies).
 		WithFacets("size", Size15GBPlus).
+		WithOrder(OrderDesc).
+		WithOrderBy(OrderBySize).
 		WithPage(2)
 	res, err := req.Do(context.Background(), cl)
 	if err != nil {
 		t.Fatalf("expected no error, got: %v", err)
 	}
 	for i, r := range res.TorrentList {
-		t.Logf("%02d: %d %q", i, r.ID, r.Name)
+		t.Logf("%03d: %07d %q %d", i+1, r.ID, r.Name, r.Size)
 	}
+	t.Logf("numFound: %d", res.NumFound)
 }
 
 func TestTorrent(t *testing.T) {
