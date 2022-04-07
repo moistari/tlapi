@@ -80,6 +80,35 @@ func (cl *Client) Torrent(ctx context.Context, id int) ([]byte, error) {
 	return ioutil.ReadAll(res.Body)
 }
 
+// Option is a TL client option.
+type Option func(cl *Client)
+
+// WithJar is an option to set the cookie jar used by the TL client.
+func WithJar(jar http.CookieJar) Option {
+	return func(cl *Client) {
+		cl.Jar = jar
+	}
+}
+
+// WithTransport is a TL client option to set the http transport used by the TL
+// client.
+func WithTransport(transport http.RoundTripper) Option {
+	return func(cl *Client) {
+		cl.Transport = transport
+	}
+}
+
+// WithCreds is a TL client option to set the PHPSESSID, tluid, and tlpass
+// cookies used by the TL client.
+func WithCreds(sessID, uid, pass string) Option {
+	return func(cl *Client) {
+		var err error
+		if cl.Jar, err = BuildJar(sessID, uid, pass); err != nil {
+			panic(err)
+		}
+	}
+}
+
 // BuildJar creates a jar.
 func BuildJar(sessID, uid, pass string) (http.CookieJar, error) {
 	jar, err := cookiejar.New(&cookiejar.Options{
@@ -121,33 +150,4 @@ func BuildJar(sessID, uid, pass string) (http.CookieJar, error) {
 		},
 	})
 	return jar, nil
-}
-
-// Option is a TL client option.
-type Option func(cl *Client)
-
-// WithJar is an option to set the cookie jar used by the TL client.
-func WithJar(jar http.CookieJar) Option {
-	return func(cl *Client) {
-		cl.Jar = jar
-	}
-}
-
-// WithTransport is a TL client option to set the http transport used by the TL
-// client.
-func WithTransport(transport http.RoundTripper) Option {
-	return func(cl *Client) {
-		cl.Transport = transport
-	}
-}
-
-// WithCreds is a TL client option to set the PHPSESSID, tluid, and tlpass
-// cookies used by the TL client.
-func WithCreds(sessID, uid, pass string) Option {
-	return func(cl *Client) {
-		var err error
-		if cl.Jar, err = BuildJar(sessID, uid, pass); err != nil {
-			panic(err)
-		}
-	}
 }
