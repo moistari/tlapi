@@ -94,7 +94,7 @@ func BuildJar(sessID, uid, pass string) (http.CookieJar, error) {
 	}
 	expires := time.Now().Add(10 * 365 * 24 * time.Hour)
 	jar.SetCookies(u, []*http.Cookie{
-		&http.Cookie{
+		{
 			Domain:  "www.torrentleech.org",
 			Path:    "/",
 			Name:    "PHPSESSID",
@@ -102,7 +102,7 @@ func BuildJar(sessID, uid, pass string) (http.CookieJar, error) {
 			Expires: expires,
 			Secure:  true,
 		},
-		&http.Cookie{
+		{
 			Domain:   "torrentleech.org",
 			Path:     "/",
 			Name:     "tluid",
@@ -111,7 +111,7 @@ func BuildJar(sessID, uid, pass string) (http.CookieJar, error) {
 			HttpOnly: true,
 			Secure:   true,
 		},
-		&http.Cookie{
+		{
 			Domain:  "torrentleech.org",
 			Path:    "/",
 			Name:    "tlpass",
