@@ -22,9 +22,8 @@ import (
 )
 
 func main() {
-	// read PHPSESSID, tluid, and tlpass cookies from browser and build a cookiejar ... hint: use github.com/zellyn/kooky !
-	jar := buildJar()
-	cl := tlapi.New(tlapi.WithJar(jar))
+	// read PHPSESSID, tluid, and tlpass cookies from browser ... hint: use github.com/zellyn/kooky !
+	cl := tlapi.New(tlapi.WithCreds("<PHPSESSID>", "<tluid>", "<tlPass>"))
 	res, err := cl.Search(context.Background(), "Fight Club")
 	if err != nil {
 		log.Fatal(err)

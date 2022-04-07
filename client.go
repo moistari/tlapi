@@ -7,6 +7,11 @@ import (
 	"fmt"
 	"io/ioutil"
 	"net/http"
+	"net/http/cookiejar"
+	"net/url"
+	"time"
+
+	"golang.org/x/net/publicsuffix"
 )
 
 // Client is a TL client.
@@ -75,6 +80,49 @@ func (cl *Client) Torrent(ctx context.Context, id int) ([]byte, error) {
 	return ioutil.ReadAll(res.Body)
 }
 
+// BuildJar creates a jar.
+func BuildJar(sessID, uid, pass string) (http.CookieJar, error) {
+	jar, err := cookiejar.New(&cookiejar.Options{
+		PublicSuffixList: publicsuffix.List,
+	})
+	if err != nil {
+		return nil, err
+	}
+	u, err := url.Parse("https://torrentleech.org/")
+	if err != nil {
+		return nil, err
+	}
+	expires := time.Now().Add(10 * 365 * 24 * time.Hour)
+	jar.SetCookies(u, []*http.Cookie{
+		&http.Cookie{
+			Domain:  "www.torrentleech.org",
+			Path:    "/",
+			Name:    "PHPSESSID",
+			Value:   sessID,
+			Expires: expires,
+			Secure:  true,
+		},
+		&http.Cookie{
+			Domain:   "torrentleech.org",
+			Path:     "/",
+			Name:     "tluid",
+			Value:    uid,
+			Expires:  expires,
+			HttpOnly: true,
+			Secure:   true,
+		},
+		&http.Cookie{
+			Domain:  "torrentleech.org",
+			Path:    "/",
+			Name:    "tlpass",
+			Value:   pass,
+			Expires: expires,
+			Secure:  true,
+		},
+	})
+	return jar, nil
+}
+
 // Option is a TL client option.
 type Option func(cl *Client)
 
@@ -90,5 +138,16 @@ func WithJar(jar http.CookieJar) Option {
 func WithTransport(transport http.RoundTripper) Option {
 	return func(cl *Client) {
 		cl.Transport = transport
+	}
+}
+
+// WithCreds is a TL client option to set the PHPSESSID, tluid, and tlpass
+// cookies used by the TL client.
+func WithCreds(sessID, uid, pass string) Option {
+	return func(cl *Client) {
+		var err error
+		if cl.Jar, err = BuildJar(sessID, uid, pass); err != nil {
+			panic(err)
+		}
 	}
 }
