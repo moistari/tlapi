@@ -8,6 +8,7 @@ import (
 	"net/url"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 )
 
@@ -20,59 +21,24 @@ type SearchRequest struct {
 	OrderBy    string
 	Order      string
 	Page       int
+
+	res *SearchResponse
+	i   int
+	p   int
+	d   time.Duration
+	err error
+	mu  sync.Mutex
 }
 
 // Search creates a search request.
 func Search(query ...string) *SearchRequest {
 	return &SearchRequest{
 		Query: query,
+		Page:  1,
+		p:     -1,
+		i:     -1,
+		d:     5 * time.Second,
 	}
-}
-
-// Do executes the request against the client.
-func (req *SearchRequest) Do(ctx context.Context, cl *Client) (*SearchResponse, error) {
-	var q string
-	if len(req.Categories) != 0 {
-		var v []string
-		for _, c := range req.Categories {
-			v = append(v, strconv.Itoa(c))
-		}
-		q += "/categories/" + strings.Join(v, ",")
-	}
-	if req.Facets != nil {
-		var v []string
-		for _, key := range []string{"added", "name", "seeders", "size", "tags"} {
-			if s, ok := req.Facets[key]; ok {
-				v = append(v, key+"%3A"+escaper.Replace(s))
-			}
-		}
-		q += "/facets/" + strings.Join(v, "_")
-	}
-	if len(req.Query) != 0 {
-		q += "/query/" + url.PathEscape(strings.Join(req.Query, " "))
-	}
-	if req.Added != "" {
-		q += "/added/" + req.Added
-	}
-	if req.OrderBy != "" {
-		q += "/orderby/" + req.OrderBy
-	}
-	if req.Order != "" {
-		q += "/order/" + req.Order
-	}
-	if req.Page != 0 {
-		q += "/page/" + strconv.Itoa(req.Page)
-	}
-	urlstr := "https://www.torrentleech.org/torrents/browse/list" + q
-	httpReq, err := http.NewRequest("GET", urlstr, nil)
-	if err != nil {
-		return nil, err
-	}
-	res := new(SearchResponse)
-	if err := cl.Do(ctx, httpReq, res); err != nil {
-		return nil, err
-	}
-	return res, nil
 }
 
 // WithCategories adds search category filters.
@@ -128,14 +94,125 @@ func (req SearchRequest) WithOrder(order string) *SearchRequest {
 	return &req
 }
 
+// WithNextDelay sets the next delay, for use if user class is rate limited.
+func (req SearchRequest) WithNextDelay(d time.Duration) *SearchRequest {
+	req.d = d
+	return &req
+}
+
+// Do executes the request against the client.
+func (req *SearchRequest) Do(ctx context.Context, cl *Client) (*SearchResponse, error) {
+	var q string
+	if len(req.Categories) != 0 {
+		var v []string
+		for _, c := range req.Categories {
+			v = append(v, strconv.Itoa(c))
+		}
+		q += "/categories/" + strings.Join(v, ",")
+	}
+	if req.Facets != nil {
+		var v []string
+		for _, key := range []string{"added", "name", "seeders", "size", "tags"} {
+			if s, ok := req.Facets[key]; ok {
+				v = append(v, key+"%3A"+escaper.Replace(s))
+			}
+		}
+		q += "/facets/" + strings.Join(v, "_")
+	}
+	if len(req.Query) != 0 {
+		q += "/query/" + url.PathEscape(strings.Join(req.Query, " "))
+	}
+	if req.Added != "" {
+		q += "/added/" + req.Added
+	}
+	if req.OrderBy != "" {
+		q += "/orderby/" + req.OrderBy
+	}
+	if req.Order != "" {
+		q += "/order/" + req.Order
+	}
+	if req.Page != 0 {
+		q += "/page/" + strconv.Itoa(req.Page)
+	}
+	urlstr := "https://www.torrentleech.org/torrents/browse/list" + q
+	httpReq, err := http.NewRequest("GET", urlstr, nil)
+	if err != nil {
+		return nil, err
+	}
+	res := new(SearchResponse)
+	if err := cl.Do(ctx, httpReq, res); err != nil {
+		return nil, err
+	}
+	return res, nil
+}
+
+// Next returns true if there are search results available for the request.
+//
+// Example:
+//
+//	req := tlapi.Search()
+//	for req.Next(ctx, cl) {
+//		torrent := req.NextTorrent()
+//		/* ... */
+//	}
+//	if err := req.Err(); err != nil {
+//		/* ... */
+//	}
+func (req *SearchRequest) Next(ctx context.Context, cl *Client) bool {
+	req.mu.Lock()
+	defer req.mu.Unlock()
+	page := req.Page
+	if page == 0 {
+		page = 1
+	}
+	switch {
+	case req.err != nil:
+		return false
+	case req.res != nil:
+		switch {
+		case req.i < len(req.res.TorrentList)-1:
+			req.i++
+			return true
+		case (page+req.p)*req.res.PerPage >= req.res.NumFound:
+			return false
+		}
+	}
+	req.p, req.i = req.p+1, 0
+	if req.d != 0 && req.p != 0 {
+		<-time.After(req.d)
+	}
+	req.res, req.err = req.WithPage(page+req.p).Do(ctx, cl)
+	return req.err == nil && req.i < len(req.res.TorrentList)
+}
+
+// Cur returns the search response cursor's current torrent. Returns the same
+// value until Next is called. Panics if called prior to Next.
+//
+// See Next for an overview of using this method.
+func (req *SearchRequest) Cur() Torrent {
+	req.mu.Lock()
+	defer req.mu.Unlock()
+	return req.res.TorrentList[req.i]
+}
+
+// Err returns the last error in the search response.
+//
+// See Next for an overview of using this method.
+func (req *SearchRequest) Err() error {
+	req.mu.Lock()
+	defer req.mu.Unlock()
+	return req.err
+}
+
 // SearchResponse is a search response.
 type SearchResponse struct {
 	Facets struct {
-		Added   Facet `json:"added,omitempty"`
-		Name    Facet `json:"name,omitempty"`
-		Seeders Facet `json:"seeders,omitempty"`
-		Size    Facet `json:"size,omitempty"`
-		Tags    Tags  `json:"tags,omitempty"`
+		CategoryID FacetID `json:"categoryID,omitempty"`
+		Added      Facet   `json:"added,omitempty"`
+		Name       Facet   `json:"name,omitempty"`
+		Seeders    Facet   `json:"seeders,omitempty"`
+		Size       Facet   `json:"size,omitempty"`
+		Tags       Tags    `json:"tags,omitempty"`
 	} `json:"facets,omitempty"`
 	Facetswoc      map[string]Tags `json:"facetswoc,omitempty"`
 	LastBrowseTime Time            `json:"lastBrowseTime,omitempty"`
@@ -156,6 +233,14 @@ type Facet struct {
 	Type  string          `json:"type,omitempty"`
 }
 
+// FacetID is a facet id.
+type FacetID struct {
+	Items map[string]int `json:"items,omitempty"`
+	Name  string         `json:"name,omitempty"`
+	Title string         `json:"title,omitempty"`
+	Type  string         `json:"type,omitempty"`
+}
+
 // Item is search facet item.
 type Item struct {
 	Label string `json:"label,omitempty"`
@@ -172,25 +257,25 @@ type Tags struct {
 
 // Torrent is a torrent.
 type Torrent struct {
-	AddedTimestamp     time.Time
-	CategoryID         int
-	Completed          int
-	DownloadMultiplier int
-	ID                 int
-	Filename           string
-	Genres             []string
-	IgdbID             string
-	ImdbID             string
-	Leechers           int
-	Name               string
-	New                bool
-	NumComments        int
-	Rating             float64
-	Seeders            int
-	Size               int64
-	Tags               []string
-	TvmazeID           string
-	Uploader           string
+	AddedTimestamp     time.Time `json:"addedTimestamp,omitempty"`
+	CategoryID         int       `json:"categoryID,omitempty"`
+	Completed          int       `json:"completed,omitempty"`
+	DownloadMultiplier int       `json:"download_multiplier,omitempty"`
+	ID                 int       `json:"id,omitempty"`
+	Filename           string    `json:"filename,omitempty"`
+	Genres             []string  `json:"genres,omitempty"`
+	IgdbID             string    `json:"igdbID,omitempty"`
+	ImdbID             string    `json:"imdbID,omitempty"`
+	Leechers           int       `json:"leechers,omitempty"`
+	Name               string    `json:"name,omitempty"`
+	New                bool      `json:"new,omitempty"`
+	NumComments        int       `json:"numComments,omitempty"`
+	Rating             float64   `json:"rating,omitempty"`
+	Seeders            int       `json:"seeders,omitempty"`
+	Size               int64     `json:"size,omitempty"`
+	Tags               []string  `json:"tags,omitempty"`
+	TvmazeID           string    `json:"tvmazeID,omitempty"`
+	Uploader           string    `json:"uploader,omitempty"`
 }
 
 // UnmarshalJSON satisfies the json.Unmarshaler interface.
@@ -335,11 +420,13 @@ func (t *Torrent) UnmarshalJSON(buf []byte) error {
 }
 
 // Time is a time value.
-type Time time.Time
+type Time struct {
+	time.Time
+}
 
 // String satisfies the fmt.Stringer interface.
 func (t Time) String() string {
-	return time.Time(t).Format(timefmt)
+	return t.Format(timefmt)
 }
 
 // UnmarshalJSON satisfies the json.Unmarshaler interface.
@@ -351,7 +438,7 @@ func (t *Time) UnmarshalJSON(buf []byte) error {
 	if err != nil {
 		return err
 	}
-	*t = Time(time.Unix(i, 0))
+	t.Time = time.Unix(i, 0)
 	return nil
 }
 

@@ -1,16 +1,3 @@
-# About
-
-TL API. See: [Go reference](https://pkg.go.dev/github.com/moistari/tlapi)
-
-Using:
-
-```sh
-go get github.com/moistari/tlapi
-```
-
-Example:
-
-```go
 // example/example.go
 package main
 
@@ -34,4 +21,3 @@ func main() {
 		log.Fatal(err)
 	}
 }
-```
