@@ -7,18 +7,15 @@ import (
 	"fmt"
 	"io"
 	"net/http"
-	"net/http/cookiejar"
-	"net/url"
-	"time"
-
-	"golang.org/x/net/publicsuffix"
+	"strings"
 )
 
 // Client is a TL client.
 type Client struct {
 	cl        *http.Client
-	Jar       http.CookieJar
+	Jar       []*http.Cookie
 	Transport http.RoundTripper
+	UserAgent string
 }
 
 // New creates a TL client.
@@ -29,17 +26,29 @@ func New(opts ...Option) *Client {
 	}
 	if cl.cl == nil {
 		cl.cl = &http.Client{
-			Jar:       cl.Jar,
 			Transport: cl.Transport,
 		}
 	}
 	return cl
 }
 
-// Do executes a request.
-func (cl *Client) Do(ctx context.Context, req *http.Request, result interface{}) error {
-	if cl.Jar == nil {
+// buildReq builds a request for the client.
+func (cl *Client) buildReq(req *http.Request) error {
+	switch {
+	case len(cl.Jar) == 0:
 		return errors.New("must supply cookie jar")
+	case cl.UserAgent == "":
+		return errors.New("must supply user-agent")
+	}
+	req.Header.Set("Cookie", cookies(cl.Jar))
+	req.Header.Set("User-Agent", cl.UserAgent)
+	return nil
+}
+
+// Do executes a request.
+func (cl *Client) Do(ctx context.Context, req *http.Request, result any) error {
+	if err := cl.buildReq(req); err != nil {
+		return err
 	}
 	req.Header.Set("Content-Type", "application/json")
 	res, err := cl.cl.Do(req.WithContext(ctx))
@@ -62,11 +71,11 @@ func (cl *Client) Search(ctx context.Context, query ...string) (*SearchResponse,
 
 // Torrent retrieves a torrent for the id.
 func (cl *Client) Torrent(ctx context.Context, id int) ([]byte, error) {
-	if cl.Jar == nil {
-		return nil, errors.New("must supply cookie jar")
-	}
 	req, err := http.NewRequest("GET", fmt.Sprintf("https://www.torrentleech.org/download/%d/%s", id, "a"), nil)
 	if err != nil {
+		return nil, err
+	}
+	if err := cl.buildReq(req); err != nil {
 		return nil, err
 	}
 	res, err := cl.cl.Do(req.WithContext(ctx))
@@ -84,7 +93,7 @@ func (cl *Client) Torrent(ctx context.Context, id int) ([]byte, error) {
 type Option func(cl *Client)
 
 // WithJar is an option to set the cookie jar used by the TL client.
-func WithJar(jar http.CookieJar) Option {
+func WithJar(jar []*http.Cookie) Option {
 	return func(cl *Client) {
 		cl.Jar = jar
 	}
@@ -98,56 +107,65 @@ func WithTransport(transport http.RoundTripper) Option {
 	}
 }
 
-// WithCreds is a TL client option to set the PHPSESSID, tluid, and tlpass
+// WithCreds is a TL client option to set the cf_clearance, tluid, and tlpass
 // cookies used by the TL client.
-func WithCreds(sessID, uid, pass string) Option {
+func WithCreds(cfClearance []string, uid, pass string) Option {
 	return func(cl *Client) {
-		var err error
-		if cl.Jar, err = BuildJar(sessID, uid, pass); err != nil {
-			panic(err)
-		}
+		cl.Jar = BuildJar(cfClearance, uid, pass)
+	}
+}
+
+// WithUserAgent is a TL client option to set the user agent used by the TL
+// client.
+func WithUserAgent(userAgent string) Option {
+	return func(cl *Client) {
+		cl.UserAgent = userAgent
 	}
 }
 
 // BuildJar creates a jar.
-func BuildJar(sessID, uid, pass string) (http.CookieJar, error) {
-	jar, err := cookiejar.New(&cookiejar.Options{
-		PublicSuffixList: publicsuffix.List,
-	})
-	if err != nil {
-		return nil, err
-	}
-	u, err := url.Parse("https://torrentleech.org/")
-	if err != nil {
-		return nil, err
-	}
-	expires := time.Now().Add(10 * 365 * 24 * time.Hour)
-	jar.SetCookies(u, []*http.Cookie{
+func BuildJar(cfClearance []string, uid, pass string) []*http.Cookie {
+	return []*http.Cookie{
 		{
-			Domain:  "www.torrentleech.org",
-			Path:    "/",
-			Name:    "PHPSESSID",
-			Value:   sessID,
-			Expires: expires,
-			Secure:  true,
+			Domain: "torrentleech.org",
+			Path:   "/",
+			Name:   "cf_clearance",
+			Value:  cfClearance[1],
+			Secure: true,
+		},
+		{
+			Domain: "torrentleech.org",
+			Path:   "/",
+			Name:   "cf_clearance",
+			Value:  cfClearance[0],
+			Secure: true,
 		},
 		{
 			Domain:   "torrentleech.org",
 			Path:     "/",
 			Name:     "tluid",
 			Value:    uid,
-			Expires:  expires,
 			HttpOnly: true,
 			Secure:   true,
 		},
 		{
-			Domain:  "torrentleech.org",
-			Path:    "/",
-			Name:    "tlpass",
-			Value:   pass,
-			Expires: expires,
-			Secure:  true,
+			Domain: "torrentleech.org",
+			Path:   "/",
+			Name:   "tlpass",
+			Value:  pass,
+			Secure: true,
 		},
-	})
-	return jar, nil
+	}
+}
+
+// cookies returns a cookie string.
+func cookies(cookies []*http.Cookie) string {
+	var sb strings.Builder
+	for i, cookie := range cookies {
+		if i != 0 {
+			sb.WriteString("; ")
+		}
+		sb.WriteString(cookie.Name + "=" + cookie.Value)
+	}
+	return sb.String()
 }

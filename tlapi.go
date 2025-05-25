@@ -42,13 +42,13 @@ func Search(query ...string) *SearchRequest {
 }
 
 // WithCategories adds search category filters.
-func (req SearchRequest) WithCategories(categories ...int) *SearchRequest {
+func (req *SearchRequest) WithCategories(categories ...int) *SearchRequest {
 	req.Categories = categories
-	return &req
+	return req
 }
 
 // WithFacets adds search facet filters as string pairs (name, value...).
-func (req SearchRequest) WithFacets(facets ...string) *SearchRequest {
+func (req *SearchRequest) WithFacets(facets ...string) *SearchRequest {
 	if len(facets)%2 != 0 {
 		panic("facets must be a multiple of 2")
 	}
@@ -58,46 +58,46 @@ func (req SearchRequest) WithFacets(facets ...string) *SearchRequest {
 	for i := 0; i < len(facets); i += 2 {
 		req.Facets[facets[i]] = facets[i+1]
 	}
-	return &req
+	return req
 }
 
 // WithFacet adds a single search facet name filter, joining values with a ','.
-func (req SearchRequest) WithFacet(name string, values ...string) *SearchRequest {
+func (req *SearchRequest) WithFacet(name string, values ...string) *SearchRequest {
 	if req.Facets == nil {
 		req.Facets = make(map[string]string)
 	}
 	req.Facets[name] = strings.Join(values, ",")
-	return &req
+	return req
 }
 
 // WithPage sets the search page filter.
-func (req SearchRequest) WithPage(page int) *SearchRequest {
+func (req *SearchRequest) WithPage(page int) *SearchRequest {
 	req.Page = page
-	return &req
+	return req
 }
 
 // WithAdded sets the search added filter.
-func (req SearchRequest) WithAdded(added string) *SearchRequest {
+func (req *SearchRequest) WithAdded(added string) *SearchRequest {
 	req.Added = added
-	return &req
+	return req
 }
 
 // WithOrderBy sets the search orderBy parameter (see OrderBy constants).
-func (req SearchRequest) WithOrderBy(orderBy string) *SearchRequest {
+func (req *SearchRequest) WithOrderBy(orderBy string) *SearchRequest {
 	req.OrderBy = orderBy
-	return &req
+	return req
 }
 
 // WithOrder sets the search order parameter (see Order constants).
-func (req SearchRequest) WithOrder(order string) *SearchRequest {
+func (req *SearchRequest) WithOrder(order string) *SearchRequest {
 	req.Order = order
-	return &req
+	return req
 }
 
 // WithNextDelay sets the next delay, for use if user class is rate limited.
-func (req SearchRequest) WithNextDelay(d time.Duration) *SearchRequest {
+func (req *SearchRequest) WithNextDelay(d time.Duration) *SearchRequest {
 	req.d = d
-	return &req
+	return req
 }
 
 // Do executes the request against the client.
@@ -134,8 +134,7 @@ func (req *SearchRequest) Do(ctx context.Context, cl *Client) (*SearchResponse, 
 	if req.Page != 0 {
 		q += "/page/" + strconv.Itoa(req.Page)
 	}
-	urlstr := "https://www.torrentleech.org/torrents/browse/list" + q
-	httpReq, err := http.NewRequest("GET", urlstr, nil)
+	httpReq, err := http.NewRequest("GET", "https://www.torrentleech.org/torrents/browse/list"+q, nil)
 	if err != nil {
 		return nil, err
 	}
@@ -219,15 +218,15 @@ func (req *SearchRequest) All(ctx context.Context, cl *Client) ([]Torrent, error
 // SearchResponse is a search response.
 type SearchResponse struct {
 	Facets struct {
-		CategoryID FacetID `json:"categoryID,omitempty"`
-		Added      Facet   `json:"added,omitempty"`
-		Name       Facet   `json:"name,omitempty"`
-		Seeders    Facet   `json:"seeders,omitempty"`
-		Size       Facet   `json:"size,omitempty"`
-		Tags       Tags    `json:"tags,omitempty"`
-	} `json:"facets,omitempty"`
+		CategoryID FacetID `json:"categoryID"`
+		Added      Facet   `json:"added"`
+		Name       Facet   `json:"name"`
+		Seeders    Facet   `json:"seeders"`
+		Size       Facet   `json:"size"`
+		Tags       Tags    `json:"tags"`
+	} `json:"facets"`
 	Facetswoc      map[string]Tags `json:"facetswoc,omitempty"`
-	LastBrowseTime Time            `json:"lastBrowseTime,omitempty"`
+	LastBrowseTime Time            `json:"lastBrowseTime"`
 	NumFound       int             `json:"numFound,omitempty"`
 	OrderBy        string          `json:"orderBy,omitempty"`
 	Order          string          `json:"order,omitempty"`
@@ -269,7 +268,7 @@ type Tags struct {
 
 // Torrent is a torrent.
 type Torrent struct {
-	AddedTimestamp     time.Time `json:"addedTimestamp,omitempty"`
+	AddedTimestamp     time.Time `json:"addedTimestamp"`
 	CategoryID         int       `json:"categoryID,omitempty"`
 	Completed          int       `json:"completed,omitempty"`
 	DownloadMultiplier int       `json:"download_multiplier,omitempty"`
@@ -277,6 +276,7 @@ type Torrent struct {
 	Filename           string    `json:"filename,omitempty"`
 	Genres             []string  `json:"genres,omitempty"`
 	IgdbID             string    `json:"igdbID,omitempty"`
+	AnimeID            string    `json:"animeID,omitempty"`
 	ImdbID             string    `json:"imdbID,omitempty"`
 	Leechers           int       `json:"leechers,omitempty"`
 	Name               string    `json:"name,omitempty"`
@@ -288,15 +288,16 @@ type Torrent struct {
 	Tags               []string  `json:"tags,omitempty"`
 	TvmazeID           string    `json:"tvmazeID,omitempty"`
 	Uploader           string    `json:"uploader,omitempty"`
+	CommentsDisabled   int       `json:"commentsDisabled,omitempty"`
 }
 
 // UnmarshalJSON satisfies the json.Unmarshaler interface.
 func (t *Torrent) UnmarshalJSON(buf []byte) error {
-	var m map[string]interface{}
+	var m map[string]any
 	if err := json.Unmarshal(buf, &m); err != nil {
 		return err
 	}
-	torrent := Torrent{}
+	var torrent Torrent
 	for k, v := range m {
 		switch k {
 		case "addedTimestamp":
@@ -326,6 +327,12 @@ func (t *Torrent) UnmarshalJSON(buf []byte) error {
 				return fmt.Errorf("invalid download_multiplier type %T", v)
 			}
 			torrent.DownloadMultiplier = int(f)
+		case "commentsDisabled":
+			f, ok := v.(float64)
+			if !ok {
+				return fmt.Errorf("invalid commentsDisabled type %T", v)
+			}
+			torrent.CommentsDisabled = int(f)
 		case "fid":
 			s, ok := v.(string)
 			if !ok {
@@ -354,6 +361,15 @@ func (t *Torrent) UnmarshalJSON(buf []byte) error {
 				torrent.IgdbID = strconv.Itoa(int(x))
 			default:
 				return fmt.Errorf("invalid igdbID type %T", v)
+			}
+		case "animeID":
+			switch x := v.(type) {
+			case string:
+				torrent.AnimeID = x
+			case float64:
+				torrent.AnimeID = strconv.Itoa(int(x))
+			default:
+				return fmt.Errorf("invalid animeID type %T", v)
 			}
 		case "imdbID":
 			var ok bool
@@ -402,7 +418,7 @@ func (t *Torrent) UnmarshalJSON(buf []byte) error {
 		case "tags":
 			switch x := v.(type) {
 			case string:
-			case []interface{}:
+			case []any:
 				for i, z := range x {
 					s, ok := z.(string)
 					if !ok {
